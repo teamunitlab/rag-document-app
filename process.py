@@ -11,7 +11,7 @@ load_dotenv()
 
 client = OpenAI()
 
-pc = Pinecone(api_key="77042468-e430-4393-827c-6ac43a160750")
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 
 PINECONE_INDEX_NAME = "rag-incubit-work"
 
@@ -31,6 +31,7 @@ if PINECONE_INDEX_NAME not in pc.list_indexes().names():
 PINECONE_INDEX = pc.Index(PINECONE_INDEX_NAME)
 
 async def process_mock_ocr(filename):
+    filename = filename.split(".")[0]
     try:
         with open("ocr/" + filename + ".json", "r") as file:
             data = json.load(file)
@@ -61,6 +62,11 @@ async def get_large_text_embedding(text, chunk_size):
     chunks = await split_text(text, chunk_size)
     batch_embeddings = [await get_embedding(chunk) for chunk in chunks]
     return batch_embeddings, chunks
+
+# Perform a metadata filter query to check for existing embeddings
+async def check_existing_recordings(file_id):
+    results = PINECONE_INDEX.query(vector=[], top_k=1, filter={'file_id': {'$eq': file_id}})
+    return len(results['matches']) > 0
 
 # process and upload embeddings to pinecone
 async def upload_embeddings_to_pinecone(batch_embeddings, chunks , file_id):

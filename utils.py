@@ -4,6 +4,7 @@ import uuid
 import boto3
 import magic
 import os
+from urllib.parse import quote, unquote
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -83,10 +84,12 @@ async def upload_file(logger, file: UploadFile):
 
         # Generate a unique file identifier
         unique_id = str(uuid.uuid4())
-        # file_extension = file.filename.split('.')[-1].lower()
-        file_key = f"{unique_id}_{file.filename}"
+        file_extension = file.filename.split('.')[-1].lower()
+        file_key = f"{unique_id}.{file_extension}"
+        print("filename", file.filename)
+        metadata = {"filename" : quote(file.filename)}
         # Upload file to S3
-        s3_client.upload_fileobj(file.file, BUCKET_NAME, file_key)
+        s3_client.upload_fileobj(file.file, BUCKET_NAME, file_key, ExtraArgs={'Metadata': metadata})
         file_url = (
             f"https://{BUCKET_NAME}.s3.{AWS_DEFAULT_REGION}.amazonaws.com/{file_key}"
         )
@@ -111,3 +114,7 @@ async def upload_file(logger, file: UploadFile):
             raise HTTPException(
                 status_code=500, detail=f"ClientError: {e.response['Error']['Message']}"
             )
+
+async def get_filename_s3(file_key):
+    response = s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
+    return unquote(response['Metadata']['filename'])

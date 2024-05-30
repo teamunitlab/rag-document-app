@@ -1,5 +1,5 @@
-from process import process_mock_ocr, get_large_text_embedding, upload_embeddings_to_pinecone
-from utils import upload_file, configure_logging
+from process import process_mock_ocr, get_large_text_embedding, upload_embeddings_to_pinecone, check_existing_recordings
+from utils import upload_file, configure_logging, get_filename_s3
 from fastapi import (
     FastAPI,
     Security,
@@ -81,13 +81,16 @@ async def mock_process_ocr(
     """
     Endpoint to process OCR on the provided file URL. Limited to 10 requests per minute.
     """
+    
     url = payload.url
-    file_ID = url.split("_")[0]
-    filename = url.split("_")[-1].split(".")[0]
+    file_key = url.split("/")[-1]
+    file_ID = file_key.split(".")[0]
+    filename = await get_filename_s3(file_key)
     ocr_data = await process_mock_ocr(filename)
     text = ocr_data["analyzeResult"]["content"]
     embeddings, chunks = await get_large_text_embedding(text, chunk_size=2000)
-    await upload_embeddings_to_pinecone(embeddings, chunks, file_ID)
+    if not await check_existing_recordings(file_ID):
+        await upload_embeddings_to_pinecone(embeddings, chunks, file_ID)
     return JSONResponse(text)
 
 
@@ -102,8 +105,8 @@ async def extract(
     pass
 
 
-# # Run the app
-# if __name__ == "__main__":
-#     import uvicorn
+# Run the app
+if __name__ == "__main__":
+    import uvicorn
 
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
