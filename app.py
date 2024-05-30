@@ -1,4 +1,4 @@
-from process import process_mock_ocr, get_large_text_embedding
+from process import process_mock_ocr, get_large_text_embedding, upload_embeddings_to_pinecone
 from utils import upload_file, configure_logging
 from fastapi import (
     FastAPI,
@@ -22,10 +22,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 # Initialize FastAPI app and limiter
-
-
 def create_app() -> FastAPI:
     app = FastAPI()
     limiter = Limiter(key_func=get_remote_address)
@@ -41,8 +38,6 @@ logger = configure_logging()
 API_KEY = os.getenv("API-KEY")
 
 api_key_header = APIKeyHeader(name="API-Key")
-
-# Dependency for validating API key
 
 
 async def validate_api_key(api_key: str = Security(api_key_header)):
@@ -62,9 +57,6 @@ class OCRPayload(BaseModel):
     url: str = None
 
 
-# Endpoint for uploading files
-
-
 @app.post("/upload")
 @limiter.limit("10/minute")
 async def upload_files(
@@ -81,10 +73,6 @@ async def upload_files(
         file_urls.append(uploaded_file)
     return JSONResponse(file_urls)
 
-
-# Endpoint for OCR processing (mock implementation)
-
-
 @app.post("/ocr")
 @limiter.limit("10/minute")
 async def mock_process_ocr(
@@ -94,13 +82,13 @@ async def mock_process_ocr(
     Endpoint to process OCR on the provided file URL. Limited to 10 requests per minute.
     """
     url = payload.url
-    ocr_data = await process_mock_ocr(url)
+    file_ID = url.split("_")[0]
+    filename = url.split("_")[-1].split(".")[0]
+    ocr_data = await process_mock_ocr(filename)
     text = ocr_data["analyzeResult"]["content"]
-    embedding = await get_large_text_embedding(text, chunk_size=2000)
+    embeddings, chunks = await get_large_text_embedding(text, chunk_size=2000)
+    await upload_embeddings_to_pinecone(embeddings, chunks, file_ID)
     return JSONResponse(text)
-
-
-# Endpoint for data extraction
 
 
 @app.post("/extract")
@@ -114,8 +102,8 @@ async def extract(
     pass
 
 
-# Run the app
-if __name__ == "__main__":
-    import uvicorn
+# # Run the app
+# if __name__ == "__main__":
+#     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+#     uvicorn.run(app, host="0.0.0.0", port=8000)
