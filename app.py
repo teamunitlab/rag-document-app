@@ -1,5 +1,10 @@
-from process import process_mock_ocr, get_large_text_embedding, upload_embeddings_to_pinecone, check_existing_recordings
-from utils import upload_file, configure_logging, get_filename_s3
+from process import (
+    process_mock_ocr,
+    get_large_text_embedding,
+    upload_embeddings_to_pinecone,
+    check_existing_recordings,
+)
+from utils import upload_file, configure_logging, get_filename_s3, validate_url
 from fastapi import (
     FastAPI,
     Security,
@@ -21,6 +26,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
 
 # Initialize FastAPI app and limiter
 def create_app() -> FastAPI:
@@ -73,6 +79,7 @@ async def upload_files(
         file_urls.append(uploaded_file)
     return JSONResponse(file_urls)
 
+
 @app.post("/ocr")
 @limiter.limit("10/minute")
 async def mock_process_ocr(
@@ -81,16 +88,18 @@ async def mock_process_ocr(
     """
     Endpoint to process OCR on the provided file URL. Limited to 10 requests per minute.
     """
-    
+
     url = payload.url
+    await validate_url(url)
     file_key = url.split("/")[-1]
     file_ID = file_key.split(".")[0]
+    if await check_existing_recordings(file_ID):
+        raise HTTPException(status_code=409, detail=f"The records for the file ID {file_ID} already exist in Pinecone")
     filename = await get_filename_s3(file_key)
     ocr_data = await process_mock_ocr(filename)
     text = ocr_data["analyzeResult"]["content"]
     embeddings, chunks = await get_large_text_embedding(text, chunk_size=2000)
-    if not await check_existing_recordings(file_ID):
-        await upload_embeddings_to_pinecone(embeddings, chunks, file_ID)
+    await upload_embeddings_to_pinecone(embeddings, chunks, file_ID)
     return JSONResponse(text)
 
 
@@ -103,7 +112,6 @@ async def extract(
     Endpoint to extract data from the provided file URL. Limited to 10 requests per minute.
     """
     pass
-
 
 # Run the app
 if __name__ == "__main__":

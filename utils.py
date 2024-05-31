@@ -4,6 +4,7 @@ import uuid
 import boto3
 import magic
 import os
+import re
 from urllib.parse import quote, unquote
 from dotenv import load_dotenv
 
@@ -84,12 +85,14 @@ async def upload_file(logger, file: UploadFile):
 
         # Generate a unique file identifier
         unique_id = str(uuid.uuid4())
-        file_extension = file.filename.split('.')[-1].lower()
+        file_extension = file.filename.split(".")[-1].lower()
         file_key = f"{unique_id}.{file_extension}"
         print("filename", file.filename)
-        metadata = {"filename" : quote(file.filename)}
+        metadata = {"filename": quote(file.filename)}
         # Upload file to S3
-        s3_client.upload_fileobj(file.file, BUCKET_NAME, file_key, ExtraArgs={'Metadata': metadata})
+        s3_client.upload_fileobj(
+            file.file, BUCKET_NAME, file_key, ExtraArgs={"Metadata": metadata}
+        )
         file_url = (
             f"https://{BUCKET_NAME}.s3.{AWS_DEFAULT_REGION}.amazonaws.com/{file_key}"
         )
@@ -97,8 +100,7 @@ async def upload_file(logger, file: UploadFile):
         return file_url
 
     except NoCredentialsError:
-        raise HTTPException(status_code=500,
-                            detail="AWS S3 Credentials not available")
+        raise HTTPException(status_code=500, detail="AWS S3 Credentials not available")
     except PartialCredentialsError:
         raise HTTPException(
             status_code=500, detail="Incomplete AWS-S3 credentials provided"
@@ -115,6 +117,15 @@ async def upload_file(logger, file: UploadFile):
                 status_code=500, detail=f"ClientError: {e.response['Error']['Message']}"
             )
 
+
+async def validate_url(url):
+    s3_bucket_pattern = re.compile(r'^https://(?P<BUCKET_NAME>[a-zA-Z0-9\-]+)\.s3\.(?P<AWS_DEFAULT_REGION>[a-zA-Z0-9-]+)\.amazonaws\.com/?.*$')
+    match = s3_bucket_pattern.match(url)
+    if not match:
+        raise HTTPException(status_code=404, detail="URL not found")
+
+
 async def get_filename_s3(file_key):
     response = s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
-    return unquote(response['Metadata']['filename'])
+    return unquote(response["Metadata"]["filename"])
+
