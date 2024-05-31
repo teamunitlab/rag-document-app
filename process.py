@@ -31,7 +31,7 @@ PINECONE_INDEX = pc.Index(PINECONE_INDEX_NAME)
 async def process_mock_ocr(filename):
     filename = filename.split(".")[0]
     try:
-        with open("ocr/" + filename + ".json", "r") as file:
+        with open(f"./assets/ocr/{filename}.json", "r") as file:
             data = json.load(file)
             return data
     except FileNotFoundError:
