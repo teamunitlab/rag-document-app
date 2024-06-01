@@ -97,7 +97,7 @@ async def upload_file(logger, file: UploadFile):
             f"https://{BUCKET_NAME}.s3.{AWS_DEFAULT_REGION}.amazonaws.com/{file_key}"
         )
         logger.info(f"File {file.filename} uploaded successfully.")
-        return file_url
+        return unique_id, file_url
 
     except NoCredentialsError:
         raise HTTPException(status_code=500, detail="AWS S3 Credentials not available")
@@ -119,7 +119,9 @@ async def upload_file(logger, file: UploadFile):
 
 
 async def validate_url(url):
-    s3_bucket_pattern = re.compile(r'^https://(?P<BUCKET_NAME>[a-zA-Z0-9\-]+)\.s3\.(?P<AWS_DEFAULT_REGION>[a-zA-Z0-9-]+)\.amazonaws\.com/?.*$')
+    s3_bucket_pattern = re.compile(
+        r"^https://(?P<BUCKET_NAME>[a-zA-Z0-9\-]+)\.s3\.(?P<AWS_DEFAULT_REGION>[a-zA-Z0-9-]+)\.amazonaws\.com/?.*$"
+    )
     match = s3_bucket_pattern.match(url)
     if not match:
         raise HTTPException(status_code=404, detail="URL not found")
@@ -128,4 +130,3 @@ async def validate_url(url):
 async def get_filename_s3(file_key):
     response = s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
     return unquote(response["Metadata"]["filename"])
-
