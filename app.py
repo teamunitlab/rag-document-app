@@ -3,10 +3,9 @@ from process import (
     get_large_text_embedding,
     upload_embeddings_to_pinecone,
     check_existing_recordings,
-    create_index_pinecone,
     search,
 )
-from utils import upload_file, configure_logging, get_filename_s3, validate_url
+from utils import upload_file, configure_logging, get_filename_s3, aws_s3_validate_url
 from fastapi import (
     FastAPI,
     Security,
@@ -15,7 +14,6 @@ from fastapi import (
     File,
     UploadFile,
     Request,
-    Depends,
 )
 from fastapi.security import APIKeyHeader
 from fastapi.responses import JSONResponse
@@ -46,7 +44,6 @@ def create_app() -> FastAPI:
 
 
 app, logger, limiter = create_app()
-
 API_KEY = os.getenv("API-KEY")
 api_key_header = APIKeyHeader(name="API-Key")
 
@@ -103,7 +100,7 @@ async def mock_process_ocr(
     Endpoint to process OCR on the provided file URL. Limited to 10 requests per minute.
     """
     url = payload.url
-    await validate_url(url)
+    await aws_s3_validate_url(url)
     file_key = url.split("/")[-1]
     file_ID = file_key.split(".")[0]
     if await check_existing_recordings(file_ID):
@@ -112,9 +109,9 @@ async def mock_process_ocr(
             detail=f"The records for the file ID {file_ID} already exist in Pinecone",
         )
     filename = await get_filename_s3(file_key)
-    text = await process_mock_ocr(filename)
-    embeddings, chunks = await get_large_text_embedding(text, chunk_size=2000)
-    await upload_embeddings_to_pinecone(embeddings, chunks, file_ID)
+    pages_text = await process_mock_ocr(filename)
+    embeddings_chunks = await get_large_text_embedding(pages_text, chunk_size=2000)
+    await upload_embeddings_to_pinecone(embeddings_chunks, file_ID)
     return JSONResponse({"info": f"the file {file_ID} has been successfully processed"})
 
 

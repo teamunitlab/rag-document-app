@@ -1,5 +1,5 @@
 import json
-from fastapi import HTTPException
+from fastapi import status, HTTPException
 from openai import OpenAI
 from openai import (
     NotFoundError,
@@ -7,7 +7,6 @@ from openai import (
     AuthenticationError,
     APIConnectionError,
     RateLimitError,
-    PermissionDeniedError,
 )
 import numpy as np
 from pinecone import Pinecone, ServerlessSpec
@@ -58,14 +57,22 @@ async def process_mock_ocr(filename):
     filename = filename.split(".")[0]
     try:
         with open(f"./assets/ocr/{filename}.json", "r") as file:
-            data = json.load(file)
-            return data["analyzeResult"]["content"]
+            pages = json.load(file)["analyzeResult"]["pages"]
+            pages_text = [" ".join(ctn["content"] for ctn in page["lines"]) for page in pages]
+            return pages_text
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Mock OCR File not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Mock OCR File not found"
+        )
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON format")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid JSON format",
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 async def get_embedding(text, model="text-embedding-3-small"):
@@ -74,16 +81,18 @@ async def get_embedding(text, model="text-embedding-3-small"):
         embeddings = (
             openapi.embeddings.create(input=[text], model=model).data[0].embedding
         )
-    except PermissionDeniedError as e:
-        raise HTTPException(status_code=500, detail=str(e))
     except APIConnectionError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
     except RateLimitError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
     except BadRequestError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
     return embeddings
 
 
@@ -93,15 +102,17 @@ async def split_text(text, chunk_size):
         text = text.replace("\n", " ")
         chunk_text = [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse OCR text {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to parse OCR text {e}",
+        )
     return chunk_text
 
 
-# Function to process large text to embedding
-async def get_large_text_embedding(text, chunk_size):
-    chunks = await split_text(text, chunk_size)
-    batch_embeddings = [await get_embedding(chunk) for chunk in chunks]
-    return batch_embeddings, chunks
+# Function to process large text to embeddings, first each page, then chunk each page if over than chunk_size
+async def get_large_text_embedding(pages_text, chunk_size):
+    embeddings_chunks = [(await get_embedding(chunk), chunk) for page in pages_text for chunk in await split_text(page, chunk_size)]
+    return embeddings_chunks
 
 
 # Perform a metadata filter query to check for existing embeddings
@@ -112,26 +123,30 @@ async def check_existing_recordings(file_id):
             vector=rnd_vector, top_k=1, filter={"file_id": file_id}
         )
     except ServiceException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=e.status, detail=str(e))
     except PineconeApiException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=e.status, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
     return len(results["matches"]) > 0
 
 
 # process and upload embeddings to pinecone
-async def upload_embeddings_to_pinecone(batch_embeddings, chunks, file_id):
+async def upload_embeddings_to_pinecone(embeddings_chunks, file_id):
     try:
-        for i, embeddings in enumerate(batch_embeddings):
-            metadata = {"file_id": file_id, "chunk_id": i, "text": chunks[i]}
+        for i, (embeddings, chunk) in enumerate(embeddings_chunks):
+            metadata = {"file_id": file_id, "chunk_id": i, "text": chunk}
             PINECONE_INDEX.upsert([(f"{file_id}_chunk_{i}", embeddings, metadata)])
     except ServiceException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=e.status, detail=str(e))
     except PineconeApiException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=e.status, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 # search text using embeddings in pinecone
@@ -148,9 +163,11 @@ async def search(query, file_id, top_k):
         for r in pc_results["matches"]:
             results.append({"score": r["score"], "text": r["metadata"]["text"]})
     except ServiceException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=e.status, detail=str(e))
     except PineconeApiException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=e.status, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
     return results

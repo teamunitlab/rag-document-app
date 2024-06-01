@@ -118,7 +118,7 @@ async def upload_file(logger, file: UploadFile):
             )
 
 
-async def validate_url(url):
+async def aws_s3_validate_url(url):
     s3_bucket_pattern = re.compile(
         r"^https://(?P<BUCKET_NAME>[a-zA-Z0-9\-]+)\.s3\.(?P<AWS_DEFAULT_REGION>[a-zA-Z0-9-]+)\.amazonaws\.com/?.*$"
     )
