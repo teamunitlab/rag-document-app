@@ -4,7 +4,7 @@ from process import (
     upload_embeddings_to_pinecone,
     check_existing_recordings,
     create_index_pinecone,
-    search
+    search,
 )
 from utils import upload_file, configure_logging, get_filename_s3, validate_url
 from fastapi import (
@@ -32,7 +32,11 @@ load_dotenv()
 
 # Initialize FastAPI, Logger and Limiter
 def create_app() -> FastAPI:
-    app = FastAPI(title=os.getenv("APP_NAME"), description=os.getenv("APP_PURPOSE"), version=os.getenv("VERSION"))
+    app = FastAPI(
+        title=os.getenv("APP_NAME"),
+        description=os.getenv("APP_PURPOSE"),
+        version=os.getenv("VERSION"),
+    )
     logger = configure_logging()
     limiter = Limiter(key_func=get_remote_address)
     app.state.limiter = limiter
@@ -63,6 +67,7 @@ async def validate_api_key(api_key: str = Security(api_key_header)):
 class OCRPayload(BaseModel):
     url: str = None
 
+
 class ExtractPayload(BaseModel):
     file_id: str = None
     query: str = None
@@ -83,7 +88,7 @@ async def upload_files(
     try:
         for file in files:
             unique_id, uploaded_file = await upload_file(logger, file)
-            file_urls.append({"id" : unique_id, "url" : uploaded_file})
+            file_urls.append({"id": unique_id, "url": uploaded_file})
         return JSONResponse(file_urls)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -102,12 +107,15 @@ async def mock_process_ocr(
     file_key = url.split("/")[-1]
     file_ID = file_key.split(".")[0]
     if await check_existing_recordings(file_ID):
-        raise HTTPException(status_code=409, detail=f"The records for the file ID {file_ID} already exist in Pinecone")
+        raise HTTPException(
+            status_code=409,
+            detail=f"The records for the file ID {file_ID} already exist in Pinecone",
+        )
     filename = await get_filename_s3(file_key)
     text = await process_mock_ocr(filename)
     embeddings, chunks = await get_large_text_embedding(text, chunk_size=2000)
     await upload_embeddings_to_pinecone(embeddings, chunks, file_ID)
-    return JSONResponse({"info" : f"the file {file_ID} has been successfully processed"})
+    return JSONResponse({"info": f"the file {file_ID} has been successfully processed"})
 
 
 @app.post("/extract")
@@ -124,9 +132,9 @@ async def extract(
     search_results = await search(query, file_id, top_k)
     return JSONResponse(search_results)
 
+
 # Run the app
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
