@@ -8,8 +8,8 @@ import re
 from urllib.parse import quote, unquote
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
-
 
 # File Upload Allowed Types and MIME Types
 ALLOWED_EXTENSIONS = {"pdf", "tiff", "png", "jpeg", "jpg"}
@@ -27,7 +27,7 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION")
 BUCKET_NAME = os.getenv("BUCKET_NAME")
 
-
+# Initialize S3 client
 s3_client = boto3.client(
     "s3",
     aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -36,9 +36,10 @@ s3_client = boto3.client(
 )
 
 # Configure logging
-
-
 def configure_logging():
+    """
+    Configure logging for the application.
+    """
     import logging
 
     logging.basicConfig(level=logging.INFO)
@@ -61,8 +62,11 @@ def configure_logging():
 
     return logger
 
-
+# Validate file type and MIME type
 async def validate_file(file: UploadFile):
+    """
+    Validate the file type and MIME type.
+    """
     file_extension = file.filename.split(".")[-1].lower()
     if file_extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -77,8 +81,11 @@ async def validate_file(file: UploadFile):
             detail=f"Invalid MIME type for {file_extension}: {mime_type}",
         )
 
-
+# Upload file to S3
 async def upload_file(logger, file: UploadFile):
+    """
+    Upload the validated file to S3 and return the file URL.
+    """
     try:
         # Validate the file
         await validate_file(file)
@@ -87,8 +94,8 @@ async def upload_file(logger, file: UploadFile):
         unique_id = str(uuid.uuid4())
         file_extension = file.filename.split(".")[-1].lower()
         file_key = f"{unique_id}.{file_extension}"
-        print("filename", file.filename)
         metadata = {"filename": quote(file.filename)}
+
         # Upload file to S3
         s3_client.upload_fileobj(
             file.file, BUCKET_NAME, file_key, ExtraArgs={"Metadata": metadata}
@@ -103,22 +110,25 @@ async def upload_file(logger, file: UploadFile):
         raise HTTPException(status_code=500, detail="AWS S3 Credentials not available")
     except PartialCredentialsError:
         raise HTTPException(
-            status_code=500, detail="Incomplete AWS-S3 credentials provided"
+            status_code=500, detail="Incomplete AWS S3 credentials provided"
         )
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         if error_code == "AccessDenied":
             raise HTTPException(
                 status_code=403,
-                detail=" AWS S3 Access denied. Check your bucket policy and IAM permissions.",
+                detail="AWS S3 Access denied. Check your bucket policy and IAM permissions.",
             )
         else:
             raise HTTPException(
                 status_code=500, detail=f"ClientError: {e.response['Error']['Message']}"
             )
 
-
+# Validate S3 URL
 async def aws_s3_validate_url(url):
+    """
+    Validate the provided S3 URL.
+    """
     s3_bucket_pattern = re.compile(
         r"^https://(?P<BUCKET_NAME>[a-zA-Z0-9\-]+)\.s3\.(?P<AWS_DEFAULT_REGION>[a-zA-Z0-9-]+)\.amazonaws\.com/?.*$"
     )
@@ -126,7 +136,10 @@ async def aws_s3_validate_url(url):
     if not match:
         raise HTTPException(status_code=404, detail="URL not found")
 
-
+# Retrieve filename from S3 object metadata
 async def get_filename_s3(file_key):
+    """
+    Retrieve the filename from the S3 object metadata.
+    """
     response = s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
     return unquote(response["Metadata"]["filename"])

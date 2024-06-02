@@ -1,4 +1,5 @@
 import json
+import os
 from fastapi import status, HTTPException
 from openai import OpenAI
 from openai import (
@@ -16,25 +17,33 @@ from pinecone.core.client.exceptions import (
     PineconeApiKeyError,
     PineconeApiException,
 )
-import os
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
-
 def init_services():
+    """
+    Initialize the OpenAI and Pinecone services.
+    Raises an exception if the API keys are invalid.
+    """
     try:
         openapi = OpenAI()
     except (AuthenticationError, NotFoundError) as e:
         raise Exception(f"The OpenAI API-key is not valid, {e}")
+
     try:
         pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     except (UnauthorizedException, PineconeApiKeyError) as e:
         raise Exception(f"The Pinecone API-key is not valid, {e}")
+
     return openapi, pc
 
-
 def create_index_pinecone(pc):
+    """
+    Create a Pinecone index if it does not exist.
+    Raises an exception if the index creation fails.
+    """
     pc_index = os.getenv("PINECONE_INDEX_NAME")
     if pc_index not in pc.list_indexes().names():
         try:
@@ -48,12 +57,15 @@ def create_index_pinecone(pc):
             raise Exception(f"The creation of index {pc_index} failed in Pinecone, {e}")
     return pc.Index(pc_index)
 
-
+# Initialize services
 openapi, pc = init_services()
 PINECONE_INDEX = create_index_pinecone(pc)
 
-
 async def process_mock_ocr(filename):
+    """
+    Process OCR data from a mock JSON file.
+    Raises HTTPException if the file is not found or contains invalid JSON.
+    """
     filename = filename.split(".")[0]
     try:
         with open(f"./assets/ocr/{filename}.json", "r") as file:
@@ -74,13 +86,14 @@ async def process_mock_ocr(filename):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
-
 async def get_embedding(text, model="text-embedding-3-small"):
+    """
+    Get embeddings for the given text using OpenAI's API.
+    Raises HTTPException for various API errors.
+    """
     try:
         text = text.replace("\n", " ")
-        embeddings = (
-            openapi.embeddings.create(input=[text], model=model).data[0].embedding
-        )
+        embeddings = openapi.embeddings.create(input=[text], model=model).data[0].embedding
     except APIConnectionError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
@@ -95,11 +108,14 @@ async def get_embedding(text, model="text-embedding-3-small"):
         )
     return embeddings
 
-
-# Function to split text into chunks
 async def split_text(text, chunk_size):
+    """
+    Split the text into chunks of the specified size.
+    Raises HTTPException if an error occurs during splitting.
+    """
     try:
         text = text.replace("\n", " ")
+        #TODO #Improve logic by not hurting cut words, using lines.
         chunk_text = [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
     except Exception as e:
         raise HTTPException(
@@ -108,15 +124,19 @@ async def split_text(text, chunk_size):
         )
     return chunk_text
 
-
-# Function to process large text to embeddings, first each page, then chunk each page if over than chunk_size
 async def get_large_text_embedding(pages_text, chunk_size):
+    """
+    Get embeddings for large text by splitting each page into chunks and processing each chunk.
+    """
     embeddings_chunks = [(await get_embedding(chunk), chunk) for page in pages_text for chunk in await split_text(page, chunk_size)]
     return embeddings_chunks
 
-
-# Perform a metadata filter query to check for existing embeddings
 async def check_existing_recordings(file_id):
+    """
+    Check if there are existing embeddings for the given file ID in Pinecone.
+    Returns True if there are existing embeddings, False otherwise.
+    Raises HTTPException for Pinecone API errors.
+    """
     rnd_vector = np.zeros(1536).tolist()
     try:
         results = PINECONE_INDEX.query(
@@ -132,9 +152,11 @@ async def check_existing_recordings(file_id):
         )
     return len(results["matches"]) > 0
 
-
-# process and upload embeddings to pinecone
 async def upload_embeddings_to_pinecone(embeddings_chunks, file_id):
+    """
+    Upload the embeddings to Pinecone with metadata.
+    Raises HTTPException for Pinecone API errors.
+    """
     try:
         for i, (embeddings, chunk) in enumerate(embeddings_chunks):
             metadata = {"file_id": file_id, "chunk_id": i, "text": chunk}
@@ -148,9 +170,11 @@ async def upload_embeddings_to_pinecone(embeddings_chunks, file_id):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
-
-# search text using embeddings in pinecone
 async def search(query, file_id, top_k):
+    """
+    Search for the text using embeddings in Pinecone.
+    Raises HTTPException for Pinecone API errors.
+    """
     embeddings = await get_embedding(query)
     results = []
     try:

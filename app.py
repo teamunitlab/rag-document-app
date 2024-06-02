@@ -25,11 +25,13 @@ from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
-
-# Initialize FastAPI, Logger and Limiter
 def create_app() -> FastAPI:
+    """
+    Initialize and configure the FastAPI application.
+    """
     app = FastAPI(
         title=os.getenv("APP_NAME"),
         description=os.getenv("APP_PURPOSE"),
@@ -39,18 +41,20 @@ def create_app() -> FastAPI:
     limiter = Limiter(key_func=get_remote_address)
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    logger.info("The sevice has been started")
+    logger.info("The service has been started")
     return app, logger, limiter
 
-
+# Initialize FastAPI app, logger, and limiter
 app, logger, limiter = create_app()
+
+# Retrieve API key from environment variables
 API_KEY = os.getenv("API-KEY")
 api_key_header = APIKeyHeader(name="API-Key")
-
 
 async def validate_api_key(api_key: str = Security(api_key_header)):
     """
     Validate the provided API key.
+    Raises HTTPException if the API key is invalid.
     """
     if api_key != API_KEY:
         logger.info("Invalid API-KEY credentials")
@@ -60,16 +64,19 @@ async def validate_api_key(api_key: str = Security(api_key_header)):
         )
     return api_key
 
-
 class OCRPayload(BaseModel):
+    """
+    Payload schema for OCR processing endpoint.
+    """
     url: str = None
 
-
 class ExtractPayload(BaseModel):
+    """
+    Payload schema for data extraction endpoint.
+    """
     file_id: str = None
     query: str = None
     top_k: int = None
-
 
 @app.post("/upload")
 @limiter.limit("10/minute")
@@ -88,8 +95,7 @@ async def upload_files(
             file_urls.append({"id": unique_id, "url": uploaded_file})
         return JSONResponse(file_urls)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @app.post("/ocr")
 @limiter.limit("10/minute")
@@ -103,17 +109,19 @@ async def mock_process_ocr(
     await aws_s3_validate_url(url)
     file_key = url.split("/")[-1]
     file_ID = file_key.split(".")[0]
+    
     if await check_existing_recordings(file_ID):
         raise HTTPException(
-            status_code=409,
+            status_code=status.HTTP_409_CONFLICT,
             detail=f"The records for the file ID {file_ID} already exist in Pinecone",
         )
+    
     filename = await get_filename_s3(file_key)
     pages_text = await process_mock_ocr(filename)
-    embeddings_chunks = await get_large_text_embedding(pages_text, chunk_size=2000)
+    embeddings_chunks = await get_large_text_embedding(pages_text, chunk_size=3000)
     await upload_embeddings_to_pinecone(embeddings_chunks, file_ID)
-    return JSONResponse({"info": f"the file {file_ID} has been successfully processed"})
-
+    
+    return JSONResponse({"info": f"The file {file_ID} has been successfully processed"})
 
 @app.post("/extract")
 @limiter.limit("10/minute")
@@ -129,9 +137,7 @@ async def extract(
     search_results = await search(query, file_id, top_k)
     return JSONResponse(search_results)
 
-
 # Run the app
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
