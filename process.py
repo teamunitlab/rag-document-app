@@ -44,6 +44,7 @@ def init_services():
 
     return openapi, pc
 
+
 def create_index_pinecone(pc):
     """
     Create a Pinecone index if it does not exist.
@@ -62,9 +63,11 @@ def create_index_pinecone(pc):
             raise Exception(f"The creation of index {pc_index} failed in Pinecone, {e}")
     return pc.Index(pc_index)
 
+
 # Initialize services
 openapi, pc = init_services()
 PINECONE_INDEX = create_index_pinecone(pc)
+
 
 async def process_mock_ocr(filename):
     """
@@ -75,7 +78,8 @@ async def process_mock_ocr(filename):
     try:
         with open(f"./assets/ocr/{filename}.json", "r") as file:
             pages = json.load(file)["analyzeResult"]["pages"]
-            pages_text = [" ".join(ctn["content"] for ctn in page["lines"]) for page in pages]
+            pages_text = [" ".join(ctn["content"]
+                                   for ctn in page["lines"]) for page in pages]
             return pages_text
     except FileNotFoundError:
         raise HTTPException(
@@ -91,15 +95,17 @@ async def process_mock_ocr(filename):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
+
 async def get_embedding(text, model="text-embedding-ada-002"):
     """
     Get embeddings for the given text using OpenAI's API.
     Raises HTTPException for various API errors.
     """
     try:
-        #tokenize Japanese text
+        # tokenize Japanese text
         text = mecab.parse(text).strip()
-        embeddings = openapi.embeddings.create(input=[text], model=model).data[0].embedding
+        embeddings = openapi.embeddings.create(
+            input=[text], model=model).data[0].embedding
     except APIConnectionError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
@@ -114,14 +120,15 @@ async def get_embedding(text, model="text-embedding-ada-002"):
         )
     return embeddings
 
+
 async def split_text(text, chunk_size):
     """
     Split the text into chunks of the specified size.
     Raises HTTPException if an error occurs during splitting.
     """
     try:
-        #TODO #Improve logic by not hurting cut words, using lines.
-        chunk_text = [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
+        # TODO #Improve logic by not hurting cut words, using lines.
+        chunk_text = [text[i: i + chunk_size] for i in range(0, len(text), chunk_size)]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -129,18 +136,22 @@ async def split_text(text, chunk_size):
         )
     return chunk_text
 
+
 async def get_large_text_embedding(pages_text, chunk_size):
     """
-    Get embeddings for large text by splitting each page into chunks and processing each chunk.
+    Get embeddings for large text
+    Splitting each page into chunks and processing each chunk.
     """
-    embeddings_chunks = [(await get_embedding(chunk), chunk) for page in pages_text for chunk in await split_text(page, chunk_size)]
+    embeddings_chunks = [(await get_embedding(chunk), chunk)
+                         for page in pages_text
+                         for chunk in await split_text(page, chunk_size)]
     return embeddings_chunks
+
 
 async def check_existing_recordings(file_id):
     """
     Check if there are existing embeddings for the given file ID in Pinecone.
     Returns True if there are existing embeddings, False otherwise.
-    Raises HTTPException for Pinecone API errors.
     """
     rnd_vector = np.zeros(1536).tolist()
     try:
@@ -157,9 +168,12 @@ async def check_existing_recordings(file_id):
         )
     return len(results["matches"]) > 0
 
+
 async def upload_embeddings_to_pinecone(embeddings_chunks, file_id):
     """
+    Get the list of chunks and their corresponding embeddings
     Upload the embeddings to Pinecone with metadata.
+    The metadata is text chunk and file_id
     Raises HTTPException for Pinecone API errors.
     """
     try:
@@ -175,9 +189,12 @@ async def upload_embeddings_to_pinecone(embeddings_chunks, file_id):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
+
 async def search(query, file_id, top_k):
     """
-    Search for the text using embeddings in Pinecone.
+    Get query, file_id and top_k
+    Search for the text using embeddings in Pinecone by the query
+    Filter by file_id
     Raises HTTPException for Pinecone API errors.
     """
     embeddings = await get_embedding(query)
@@ -201,19 +218,25 @@ async def search(query, file_id, top_k):
         )
     return results
 
-async def chat_completions(search_results, query , model="gpt-3.5-turbo"):
+
+async def chat_completions(search_results, query, model="gpt-3.5-turbo"):
     """
-    TODO
+    Get top three search results from Pinecone
+    Merge search results and create a context
+    Give a context and query to get an answer
     """
     try:
         context = " ".join(result["text"] for result in search_results)
         answers = openapi.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-            {"role": "system", "content": "Keep answer in Japanese language"},
-            {"role": "user", "content": f"{query}"},
-            {"role": "assistant", "content": f"follow only this context: {context}"},
-            ]
+                {"role": "system", "content": "Keep answer in Japanese language"},
+                {"role": "user", "content": f"{query}"},
+                {
+                    "role": "assistant",
+                    "content": f"follow only this context: {context}",
+                },
+            ],
         )
     except APIConnectionError as e:
         raise HTTPException(

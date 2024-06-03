@@ -26,11 +26,12 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel
 import redis.asyncio as redis
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
 
 def create_app() -> FastAPI:
     """
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     logger.info("The service has been started")
     return app, logger, limiter
 
+
 # Initialize FastAPI app, logger, and limiter
 app, logger, limiter = create_app()
 
@@ -59,14 +61,18 @@ api_key_header = APIKeyHeader(name="API-Key")
 REDIS_URL = os.getenv("REDIS_URL")
 redis_client = None
 
+
 @app.on_event("startup")
 async def startup():
     global redis_client
-    redis_client = redis.Redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
+    redis_client = redis.Redis.from_url(
+        REDIS_URL, encoding="utf-8", decode_responses=True)
+
 
 @app.on_event("shutdown")
 async def shutdown():
     await redis_client.close()
+
 
 async def validate_api_key(api_key: str = Security(api_key_header)):
     """
@@ -81,11 +87,13 @@ async def validate_api_key(api_key: str = Security(api_key_header)):
         )
     return api_key
 
+
 class OCRPayload(BaseModel):
     """
     Payload schema for OCR processing endpoint.
     """
     url: str = None
+
 
 class ExtractPayload(BaseModel):
     """
@@ -93,6 +101,7 @@ class ExtractPayload(BaseModel):
     """
     file_id: str = None
     query: str = None
+
 
 @app.post("/upload")
 @limiter.limit("10/minute")
@@ -102,7 +111,8 @@ async def upload_files(
     files: List[UploadFile] = File(...),
 ):
     """
-    Endpoint to upload files. Limited to 10 requests per minute.
+    Endpoint to upload files.
+    Limited to 10 requests per minute.
     """
     file_urls = []
     try:
@@ -111,7 +121,9 @@ async def upload_files(
             file_urls.append({"id": unique_id, "url": uploaded_file})
         return JSONResponse(file_urls)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @app.post("/ocr")
 @limiter.limit("10/minute")
@@ -119,15 +131,16 @@ async def mock_process_ocr(
     request: Request, payload: OCRPayload, api_key: str = Security(validate_api_key)
 ):
     """
-    Endpoint to process OCR on the provided file URL. Limited to 10 requests per minute.
+    Endpoint to process OCR on the provided file URL.
+    Limited to 10 requests per minute.
     """
     url = payload.url
     await aws_s3_validate_url(url)
     file_key = url.split("/")[-1]
     file_ID = file_key.split(".")[0]
-    
-    # Create a cache key using the file_ID. 
-    # The 'quote' function ensures that any non-ASCII characters in the file_ID are properly encoded.
+
+    # Create a cache key using the file_ID.
+    # The 'quote' function handles non-ASCII characters
     # Check both Pipecone and Redis for Existing Recordings
     cache_key = f"ocr_result_{quote(file_ID)}"
     cached_result = await redis_client.get(cache_key)
@@ -143,19 +156,21 @@ async def mock_process_ocr(
     await redis_client.set(cache_key, json.dumps(result), ex=3600)  # Cache for 1 hour
     return JSONResponse(result)
 
+
 @app.post("/extract")
 @limiter.limit("10/minute")
 async def extract(
     request: Request, payload: ExtractPayload, api_key: str = Security(validate_api_key)
 ):
     """
-    Endpoint to extract data from the provided file URL. Limited to 10 requests per minute.
+    Endpoint to extract data from the provided file URL.
+    Limited to 10 requests per minute.
     """
     query = payload.query
     file_id = payload.file_id
 
-    # Create a cache key using the file_id and query. 
-    # The 'quote' function ensures that any non-ASCII characters in the file_id and query are properly encoded.
+    # Create a cache key using the file_id and query.
+    # The 'quote' function handles non-ASCII characters
     cache_key = f"extract_result_{quote(file_id)}_{quote(query)}"
     cached_result = await redis_client.get(cache_key)
     if cached_result:

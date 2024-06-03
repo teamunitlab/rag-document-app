@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Security, HTTPException, status, File, UploadFile
+from fastapi import HTTPException, UploadFile, status
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 import uuid
 import boto3
@@ -36,6 +36,8 @@ s3_client = boto3.client(
 )
 
 # Configure logging
+
+
 def configure_logging():
     """
     Configure logging for the application.
@@ -62,7 +64,10 @@ def configure_logging():
 
     return logger
 
+
 # Validate file type and MIME type
+
+
 async def validate_file(file: UploadFile):
     """
     Validate the file type and MIME type.
@@ -81,7 +86,10 @@ async def validate_file(file: UploadFile):
             detail=f"Invalid MIME type for {file_extension}: {mime_type}",
         )
 
+
 # Upload file to S3
+
+
 async def upload_file(logger, file: UploadFile):
     """
     Upload the validated file to S3 and return the file URL.
@@ -107,24 +115,37 @@ async def upload_file(logger, file: UploadFile):
         return unique_id, file_url
 
     except NoCredentialsError:
-        raise HTTPException(status_code=500, detail="AWS S3 Credentials not available")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AWS S3 Credentials not available",
+        )
     except PartialCredentialsError:
         raise HTTPException(
-            status_code=500, detail="Incomplete AWS S3 credentials provided"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Incomplete AWS S3 credentials provided",
         )
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         if error_code == "AccessDenied":
             raise HTTPException(
-                status_code=403,
-                detail="AWS S3 Access denied. Check your bucket policy and IAM permissions.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="AWS S3 Access denied. \
+                Check your bucket policy and IAM permissions.",
             )
         else:
             raise HTTPException(
-                status_code=500, detail=f"ClientError: {e.response['Error']['Message']}"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"ClientError: {e.response['Error']['Message']}",
             )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
 
 # Validate S3 URL
+
+
 async def aws_s3_validate_url(url):
     """
     Validate the provided S3 URL.
@@ -136,10 +157,41 @@ async def aws_s3_validate_url(url):
     if not match:
         raise HTTPException(status_code=404, detail="URL not found")
 
+
 # Retrieve filename from S3 object metadata
+
+
 async def get_filename_s3(file_key):
     """
     Retrieve the filename from the S3 object metadata.
     """
-    response = s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
-    return unquote(response["Metadata"]["filename"])
+    try:
+        response = s3_client.head_object(Bucket=BUCKET_NAME, Key=file_key)
+        return unquote(response["Metadata"]["filename"])
+    except NoCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AWS S3 Credentials not available",
+        )
+    except PartialCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Incomplete AWS S3 credentials provided",
+        )
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "AccessDenied":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="AWS S3 Access denied. \
+                Check your bucket policy and IAM permissions.",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"ClientError: {e.response['Error']['Message']}",
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
