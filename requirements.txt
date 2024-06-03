@@ -11,4 +11,5 @@ pydantic==2.7.2
 python-dotenv==1.0.1
 python_magic==0.4.27
 slowapi==0.1.9
+flake8==7.0.0
 uvicorn==0.30.1
