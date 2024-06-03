@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED 1
 RUN apt-get update \
 	&& apt-get install -y \
 	libfontconfig1 \
-    libmagic-dev \
+	libmagic-dev \
 	unzip \
 	wget \
 	&& rm -rf /var/lib/apt/lists/* 
