@@ -18,9 +18,14 @@ from pinecone.core.client.exceptions import (
     PineconeApiException,
 )
 from dotenv import load_dotenv
+import MeCab
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Initialize MeCab tokenizer
+mecab = MeCab.Tagger("-Owakati")
+
 
 def init_services():
     """
@@ -86,13 +91,14 @@ async def process_mock_ocr(filename):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
-async def get_embedding(text, model="text-embedding-3-small"):
+async def get_embedding(text, model="text-embedding-ada-002"):
     """
     Get embeddings for the given text using OpenAI's API.
     Raises HTTPException for various API errors.
     """
     try:
-        text = text.replace("\n", " ")
+        #tokenize Japanese text
+        text = mecab.parse(text).strip()
         embeddings = openapi.embeddings.create(input=[text], model=model).data[0].embedding
     except APIConnectionError as e:
         raise HTTPException(
@@ -114,7 +120,6 @@ async def split_text(text, chunk_size):
     Raises HTTPException if an error occurs during splitting.
     """
     try:
-        text = text.replace("\n", " ")
         #TODO #Improve logic by not hurting cut words, using lines.
         chunk_text = [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
     except Exception as e:
@@ -195,3 +200,31 @@ async def search(query, file_id, top_k):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
     return results
+
+async def chat_completions(search_results, query , model="gpt-3.5-turbo"):
+    """
+    TODO
+    """
+    try:
+        context = " ".join(result["text"] for result in search_results)
+        answers = openapi.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+            {"role": "system", "content": "Keep answer in Japanese language"},
+            {"role": "user", "content": f"{query}"},
+            {"role": "assistant", "content": f"follow only this context: {context}"},
+            ]
+        )
+    except APIConnectionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+    except RateLimitError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except BadRequestError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+    return answers.choices[0].message.content

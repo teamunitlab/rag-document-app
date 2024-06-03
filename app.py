@@ -4,6 +4,7 @@ from process import (
     upload_embeddings_to_pinecone,
     check_existing_recordings,
     search,
+    chat_completions
 )
 from utils import upload_file, configure_logging, get_filename_s3, aws_s3_validate_url
 from fastapi import (
@@ -76,7 +77,6 @@ class ExtractPayload(BaseModel):
     """
     file_id: str = None
     query: str = None
-    top_k: int = None
 
 @app.post("/upload")
 @limiter.limit("10/minute")
@@ -133,11 +133,12 @@ async def extract(
     """
     query = payload.query
     file_id = payload.file_id
-    top_k = payload.top_k
-    search_results = await search(query, file_id, top_k)
-    return JSONResponse(search_results)
+    search_results = await search(query, file_id, top_k=3)
+    answers = await chat_completions(search_results, query)
+    return JSONResponse({"reply":answers, "search_results":search_results})
 
 # Run the app
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
