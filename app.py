@@ -40,7 +40,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=os.getenv("APP_NAME"),
         description=os.getenv("APP_PURPOSE"),
-        version=os.getenv("VERSION"),
+        version=0.01,
     )
     logger = configure_logging()
     limiter = Limiter(key_func=get_remote_address)
