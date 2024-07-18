@@ -1,0 +1,17 @@
+version: '2'
+
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+  
+  rag-document-application:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    command: uvicorn app:app --host 0.0.0.0 --port 56044 --workers 4
+    ports:
+      - "56044:56044"
+    environment:
+      - REDIS_URL=redis://redis:6379
