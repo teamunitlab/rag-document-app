@@ -1,8 +1,8 @@
 # RAG Document Application
 
-This FastAPI-based RAG service processes OCR data, generates embeddings using OpenAI, and utilizes Pinecone as a vector database for search. It answers questions based on search results using OpenAI.
+An end-to-end RAG application (from scratch) based on FastAPI that processes PDFs, images, and web pages to obtain OCR data, generates embeddings using OpenAI's embedding models, and utilizes Pinecone as a vector database for search. It answers questions based on search results using OpenAI Chat Completion!
 
-<img src="assets/architecture.gif" width=75%>
+<img src="assets/architecture.gif" width=80%>
 
 ## Contents
 - [Checklist](#checklist)
@@ -12,12 +12,15 @@ This FastAPI-based RAG service processes OCR data, generates embeddings using Op
 - [Endpoints](#endpoints)
 
 ## Checklist
-- [x] Secured all endpoints with API keys using FastAPI's Security Class (OAuth2).
+- [x] Basic API authentication
+- [ ] End-2-End API authentication/authorization (coming)
 - [x] Rate limiting to prevent abuse.
 - [x] Asynchronous processing.
 - [x] File uploading (AWS S3) including validation and sanitization.
 - [x] OCR processing (from mock files), Embedding generation using OpenAI.
 - [ ] End-2-End OCR (Model Serving) and Google APIs, Mathpix API Integrations
+- [x] processes PDFs, Images
+- [ ] processes Web Pages
 - [x] Storage and search of embeddings with Pinecone.
 - [x] Search from the document
 - [x] Applied Tokenizers for better search performance. 
