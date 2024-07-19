@@ -2,6 +2,8 @@
 
 This FastAPI-based RAG service processes OCR data, generates embeddings using OpenAI, and utilizes Pinecone as a vector database for search. It answers questions based on search results using OpenAI.
 
+<img src="assets/architecture.gif" width=50%>
+
 ## Contents
 - [Checklist](#checklist)
 - [Installation](#installation)
@@ -95,6 +97,13 @@ This FastAPI-based RAG service processes OCR data, generates embeddings using Op
     - `query`: Ask a question from your document!
     - `API-Key`: Header for API key authentication.
 - **Response**: JSON containing information about a reply to the question and the three top search results. 
+
+### References
+1. http://unitlab.ai/
+2. https://blog.unitlab.ai/unitlab-ai-data-collection-and-annotation-for-llms-and-generative-ai/
+3. https://docs.unitlab.ai/ai-models/model-integration
+4. https://blog.unitlab.ai/
+
 
 
 
