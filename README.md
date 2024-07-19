@@ -2,7 +2,7 @@
 
 This FastAPI-based RAG service processes OCR data, generates embeddings using OpenAI, and utilizes Pinecone as a vector database for search. It answers questions based on search results using OpenAI.
 
-<img src="assets/architecture.gif" width=50%>
+<img src="assets/architecture.gif" width=75%>
 
 ## Contents
 - [Checklist](#checklist)
