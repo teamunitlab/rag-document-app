@@ -17,15 +17,19 @@ This FastAPI-based RAG service processes OCR data, generates embeddings using Op
 - [x] Asynchronous processing.
 - [x] File uploading (AWS S3) including validation and sanitization.
 - [x] OCR processing (from mock files), Embedding generation using OpenAI.
+- [ ] End-2-End OCR (Model Serving) and Google APIs, Mathpix API Integrations
 - [x] Storage and search of embeddings with Pinecone.
 - [x] Search from the document
-- [x] Applied Japanese Tokenizer for better search performance. 
+- [x] Applied Tokenizers for better search performance. 
 - [x] Talk to your data! Chat and generate the answer from the search results using OpenAI's chat completions.
+- [ ] OpenAPI chat completion streaming support
 - [x] Dockerize App.
 - [x] Implemented Redis for caching and frequent queries.
 - [x] The detailed comments, docstrings, lint checks, pip8. 
-- [x] CD (GitHub actions)
+- [ ] CD (GitHub actions)
 - [ ] CI & PyTest codes
+- [ ] Chat Interface 
+
 
 ## Prerequisites
 - Python 3.11 
